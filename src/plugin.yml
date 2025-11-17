@@ -1,0 +1,15 @@
+name: DwarfMode
+main: io.hotmail.com.jacob_vejvoda.DwarfMode.DwarfMode
+version: 2.0.0
+api-version: 1.21
+author: Eliminator
+description: Плагин для гномов, которые живут под землей и не любят вылезать на поверхность
+website: https://github.com/yourusername/DwarfMode
+
+commands:
+  dwarfmode:
+    aliases: [dwm]
+    description: Base Dwarf Mode command.
+    usage: /<command>
+    permission: dwm.cmds
+    permission-message: You don't have <permission>
