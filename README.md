@@ -165,3 +165,7 @@ DwarfMode/
 
 
 ⭐ Если вам нравится этот плагин, поставьте звезду на GitHub!
+
+
+## cd "C:\Users\Meows\Desktop\Projects\Minecraft Plugin\DwarfMode"; mvn clean compile
+## cd "C:\Users\Meows\Desktop\Projects\Minecraft Plugin\DwarfMode"; mvn package      
