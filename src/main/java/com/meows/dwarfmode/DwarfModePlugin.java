@@ -388,9 +388,10 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             checkTask.cancel();
         }
 
-        // Сохраняем ссылку на плагин для безопасного использования в задаче планировщика
+        // Сохраняем ссылку на плагин для безопасного использования в задаче
+        // планировщика
         final DwarfModePlugin plugin = this;
-        
+
         checkTask = Bukkit.getScheduler().runTaskTimer(this, new Runnable() {
             @Override
             public void run() {
@@ -477,13 +478,15 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
 
     /**
      * Применение бонусов под землей
-     * Применяет эффекты только для тех глубин, которые меньше или равны текущей
-     * глубине игрока
+     * Применяет эффекты накопительно для всех глубин, которые игрок достиг или
+     * прошел
      * (чем глубже игрок, тем больше эффектов он получает)
      * 
-     * Пример: если игрок на -35, а в конфиге есть эффекты для -40, -54, -55, -64,
-     * то применяются эффекты только для -40, -54, -55, -64 (все, что глубже или
-     * равно -35)
+     * Пример: если игрок на -35, а в конфиге есть эффекты для -10, -35, -45,
+     * то применяются эффекты для -10 и -35 (все, что >= -35)
+     * 
+     * Важно: эффекты применяются от меньшей глубины к большей (от -10 к -45),
+     * чтобы эффекты накапливались правильно
      */
     private void applyUndergroundBonuses(Player player, int playerY) {
         if (undergroundEffects.isEmpty()) {
@@ -491,16 +494,17 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
         }
 
         try {
-            // Для отрицательных глубин: если игрок на -35, нужно применить эффекты для -40,
-            // -54, -55, -64
-            // tailMap(playerY, true) возвращает все ключи >= playerY, но для отрицательных
-            // это неправильно
-            // Поэтому проходим по всем эффектам и применяем только те, где depth <= playerY
-            for (Map.Entry<Integer, List<PotionEffect>> entry : undergroundEffects.entrySet()) {
+            // Применяем эффекты в порядке от меньшей глубины к большей (от -10 к -45)
+            // Это важно для правильного накопления эффектов
+            // Используем descendingMap() чтобы получить порядок от больших значений к
+            // меньшим
+            // Для отрицательных: -10 > -35 > -45, поэтому descendingMap даст -10, -35, -45
+            for (Map.Entry<Integer, List<PotionEffect>> entry : undergroundEffects.descendingMap().entrySet()) {
                 int depth = entry.getKey();
-                // Применяем эффекты только если глубина меньше или равна текущей глубине игрока
-                // Для отрицательных: -40 <= -35 (true), -54 <= -35 (true), и т.д.
-                if (depth <= playerY) {
+                // Применяем эффекты только если глубина больше или равна текущей глубине игрока
+                // Для отрицательных: -10 >= -10 (true), -10 >= -35 (false), -35 >= -35 (true)
+                // Это означает, что эффекты применяются накопительно
+                if (depth >= playerY) {
                     for (PotionEffect effect : entry.getValue()) {
                         applyEffect(player, effect);
                     }
