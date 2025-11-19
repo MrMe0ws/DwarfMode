@@ -388,10 +388,13 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             checkTask.cancel();
         }
 
+        // Сохраняем ссылку на плагин для безопасного использования в задаче планировщика
+        final DwarfModePlugin plugin = this;
+        
         checkTask = Bukkit.getScheduler().runTaskTimer(this, new Runnable() {
             @Override
             public void run() {
-                checkAllPlayers();
+                plugin.checkAllPlayers();
             }
         }, checkInterval, checkInterval);
     }
@@ -408,6 +411,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             try {
                 checkPlayer(player);
             } catch (Exception e) {
+                // Используем сохраненную ссылку на плагин для безопасного логирования
                 getLogger().warning("Ошибка при проверке игрока " + player.getName() + ": " + e.getMessage());
             }
         }
