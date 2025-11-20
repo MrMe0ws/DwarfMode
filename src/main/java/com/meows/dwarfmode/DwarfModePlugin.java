@@ -39,6 +39,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     private List<PotionEffect> sunlightEffects = new ArrayList<>();
     private long dayTimeStart = 0; // Начало дня (в тиках)
     private long dayTimeEnd = 12000; // Конец дня (в тиках)
+    private int sunlightEffectDuration = 100; // Продолжительность эффектов (в тиках)
 
     // ============================================
     // СЛЕПОТА НА ОТКРЫТОМ НЕБЕ
@@ -51,6 +52,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     private boolean surfacePenaltiesEnabled = true;
     private int surfaceLevel = 64; // Высота, считающаяся "поверхностью"
     private List<PotionEffect> surfaceEffects = new ArrayList<>();
+    private int surfaceEffectDuration = 100; // Продолжительность эффектов (в тиках)
     private boolean surfaceDamageEnabled = false;
     private int surfaceDamage = 1;
     private int surfaceDamageInterval = 100; // В тиках
@@ -213,7 +215,8 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                         continue;
                     }
 
-                    List<PotionEffect> effects = parseEffects(effectList, depth);
+                    // Для подземных бонусов используем продолжительность 200 тиков по умолчанию
+                    List<PotionEffect> effects = parseEffects(effectList, depth, 100);
                     if (!effects.isEmpty()) {
                         undergroundEffects.put(depth, effects);
                     }
@@ -249,10 +252,11 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             sunlightBurn = section.getBoolean("burnInSunlight", true);
             dayTimeStart = section.getLong("dayTimeStart", 0);
             dayTimeEnd = section.getLong("dayTimeEnd", 12000);
+            sunlightEffectDuration = section.getInt("duration", 100);
 
             List<?> effectList = section.getList("sunlightEffects");
             if (effectList != null && !effectList.isEmpty()) {
-                sunlightEffects = parseEffects(effectList, 0);
+                sunlightEffects = parseEffects(effectList, 0, sunlightEffectDuration);
             }
 
             getLogger().info("Штрафы за солнечный свет загружены. Эффектов: " + sunlightEffects.size());
@@ -292,10 +296,11 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
 
             surfacePenaltiesEnabled = section.getBoolean("enabled", true);
             surfaceLevel = section.getInt("surfaceLevel", 64);
+            surfaceEffectDuration = section.getInt("duration", 100);
 
             List<?> effectList = section.getList("surfaceEffects");
             if (effectList != null && !effectList.isEmpty()) {
-                surfaceEffects = parseEffects(effectList, 0);
+                surfaceEffects = parseEffects(effectList, 0, surfaceEffectDuration);
             }
 
             // Загрузка настроек урона со временем
@@ -317,7 +322,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     /**
      * Парсинг списка эффектов из конфига
      */
-    private List<PotionEffect> parseEffects(List<?> effectList, int depth) {
+    private List<PotionEffect> parseEffects(List<?> effectList, int depth, int duration) {
         List<PotionEffect> effects = new ArrayList<>();
 
         for (Object effectObj : effectList) {
@@ -368,8 +373,12 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                     continue;
                 }
 
+                // В Minecraft уровни эффектов: 0 = I, 1 = II, 2 = III и т.д.
+                // В конфиге пользователь указывает: 1 = I, 2 = II, 3 = III
                 int effectLevel = Math.max(0, level - 1);
-                PotionEffect effect = new PotionEffect(effectType, 100, effectLevel);
+                // Используем продолжительность из конфига
+                // ambient: false - для правильного визуального отображения уровня эффекта
+                PotionEffect effect = new PotionEffect(effectType, duration, effectLevel, false, false);
                 effects.add(effect);
 
             } catch (Exception e) {
@@ -460,19 +469,20 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             checkSkyBlindness(player, world, loc);
         }
 
-        // 3. ШТРАФЫ ЗА СОЛНЕЧНЫЙ СВЕТ
-        // Применяем каждый checkInterval
-        if (sunlightPenaltiesEnabled) {
-            checkSunlightPenalties(player, world, loc);
-        }
-
-        // 4. ШТРАФЫ НА ПОВЕРХНОСТИ
+        // 3. ШТРАФЫ НА ПОВЕРХНОСТИ (применяем первыми)
         // Применяем каждый checkInterval
         if (surfacePenaltiesEnabled && playerY >= surfaceLevel) {
             applySurfacePenalties(player);
             if (surfaceDamageEnabled) {
                 checkSurfaceDamage(player);
             }
+        }
+
+        // 4. ШТРАФЫ ЗА СОЛНЕЧНЫЙ СВЕТ (применяем последними, чтобы перезаписать
+        // surfacePenalties)
+        // Применяем каждый checkInterval
+        if (sunlightPenaltiesEnabled) {
+            checkSunlightPenalties(player, world, loc);
         }
     }
 
@@ -609,6 +619,9 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
 
     /**
      * Применение эффекта игроку
+     * Применяет эффект, перезаписывая существующий эффект того же типа
+     * Важно: всегда перезаписывает, чтобы гарантировать правильное отображение
+     * уровня
      */
     private void applyEffect(Player player, PotionEffect effect) {
         if (player == null || !player.isOnline() || effect == null) {
@@ -616,9 +629,14 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
         }
 
         try {
+            // Всегда удаляем существующий эффект перед применением нового
+            // Это гарантирует правильное обновление уровня эффекта на клиенте
             if (player.hasPotionEffect(effect.getType())) {
                 player.removePotionEffect(effect.getType());
             }
+
+            // Применяем новый эффект
+            // Используем addPotionEffect без параметра force (современный API)
             player.addPotionEffect(effect);
         } catch (Exception e) {
             getLogger().warning("Ошибка при применении эффекта " + effect.getType() + " игроку " + player.getName()
