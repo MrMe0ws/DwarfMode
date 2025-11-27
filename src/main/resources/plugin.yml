@@ -2,9 +2,9 @@ name: DwarfMode
 version: ${project.version}
 main: com.meows.dwarfmode.DwarfModePlugin
 api-version: 1.21
-author: Eliminator
+author: MrMeows
 description: Плагин для гномов, которые живут под землей и не любят вылезать на поверхность
-website: https://github.com/yourusername/DwarfMode
+website: https://github.com/MrMe0ws/DwarfMode
 
 commands:
   dwarfmode:
