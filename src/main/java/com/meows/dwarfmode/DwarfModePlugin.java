@@ -36,6 +36,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     // ============================================
     private boolean sunlightPenaltiesEnabled = true;
     private boolean sunlightBurn = true; // Гномы горят на солнце
+    private boolean helmetProtectionEnabled = true; // Защита от солнца шлемами/головами
     private List<PotionEffect> sunlightEffects = new ArrayList<>();
     private long dayTimeStart = 0; // Начало дня (в тиках)
     private long dayTimeEnd = 12000; // Конец дня (в тиках)
@@ -250,6 +251,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
 
             sunlightPenaltiesEnabled = section.getBoolean("enabled", true);
             sunlightBurn = section.getBoolean("burnInSunlight", true);
+            helmetProtectionEnabled = section.getBoolean("helmetProtection", true);
             dayTimeStart = section.getLong("dayTimeStart", 0);
             dayTimeEnd = section.getLong("dayTimeEnd", 12000);
             sunlightEffectDuration = section.getInt("duration", 100);
@@ -567,13 +569,19 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
 
             // Проверяем, что игрок видит небо (нет блоков над головой)
             if (loc.getBlockY() >= highestBlockY) {
+                // Проверяем защиту шлемом/головой
+                boolean isProtected = false;
+                if (helmetProtectionEnabled) {
+                    isProtected = hasProtectiveHelmet(player);
+                }
+
                 // Применяем эффекты
                 for (PotionEffect effect : sunlightEffects) {
                     applyEffect(player, effect);
                 }
 
-                // Поджигаем игрока, если включено
-                if (sunlightBurn) {
+                // Поджигаем игрока, если включено и нет защиты
+                if (sunlightBurn && !isProtected) {
                     player.setFireTicks(100);
                 }
             }
@@ -615,6 +623,60 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
         } else {
             surfaceDamageTicks.put(playerId, newTick); // Сохраняем текущий счетчик
         }
+    }
+
+    /**
+     * Проверка наличия защитного шлема/головы у игрока
+     * Защищает от урона от солнца
+     */
+    private boolean hasProtectiveHelmet(Player player) {
+        if (player == null || !player.isOnline()) {
+            return false;
+        }
+
+        ItemStack helmet = player.getInventory().getHelmet();
+        if (helmet == null || helmet.getType() == Material.AIR) {
+            return false;
+        }
+
+        Material helmetType = helmet.getType();
+
+        // Проверяем все типы защитных шлемов
+        // Медная шляпа добавлена в Minecraft 1.21.10
+        boolean isStandardHelmet = helmetType == Material.LEATHER_HELMET ||
+                helmetType == Material.CHAINMAIL_HELMET ||
+                helmetType == Material.IRON_HELMET ||
+                helmetType == Material.GOLDEN_HELMET ||
+                helmetType == Material.DIAMOND_HELMET ||
+                helmetType == Material.NETHERITE_HELMET ||
+                helmetType == Material.TURTLE_HELMET; // Черепаший панцирь
+
+        // Медная шляпа (официально добавлена в 1.21.10)
+        // Используем безопасную проверку на случай, если API версия старше
+        boolean isCopperHelmet = false;
+        try {
+            // Пробуем использовать Material.COPPER_HELMET напрямую
+            Material copperHelmet = Material.valueOf("COPPER_HELMET");
+            if (copperHelmet != null) {
+                isCopperHelmet = (helmetType == copperHelmet);
+            }
+        } catch (IllegalArgumentException e) {
+            // COPPER_HELMET может отсутствовать в старых версиях API
+        }
+
+        return isStandardHelmet || isCopperHelmet ||
+        // Тыква
+                helmetType == Material.CARVED_PUMPKIN ||
+                helmetType == Material.PUMPKIN ||
+                // Голова эндер дракона
+                helmetType == Material.DRAGON_HEAD ||
+                // Головы мобов
+                helmetType == Material.PLAYER_HEAD ||
+                helmetType == Material.ZOMBIE_HEAD ||
+                helmetType == Material.CREEPER_HEAD ||
+                helmetType == Material.SKELETON_SKULL ||
+                helmetType == Material.WITHER_SKELETON_SKULL ||
+                helmetType == Material.PIGLIN_HEAD; // Голова пиглина
     }
 
     /**
