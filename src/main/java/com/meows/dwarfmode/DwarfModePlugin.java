@@ -567,6 +567,13 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 return; // Ночь, солнца нет
             }
 
+            // Проверяем, идет ли дождь или шторм
+            // Если идет дождь/шторм, игрок не должен гореть и получать эффекты солнечного
+            // света
+            if (world.hasStorm() || world.isThundering()) {
+                return; // Дождь/шторм, солнца нет
+            }
+
             // Проверяем, что игрок видит небо (нет блоков над головой)
             if (loc.getBlockY() >= highestBlockY) {
                 // Проверяем защиту шлемом/головой
