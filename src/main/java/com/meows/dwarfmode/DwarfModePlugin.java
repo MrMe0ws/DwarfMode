@@ -553,15 +553,17 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
      */
     private void checkSunlightPenalties(Player player, World world, Location loc) {
         try {
-            // Проверяем, что игрок на открытом небе
-            int highestBlockY = world.getHighestBlockYAt(loc);
-            if (loc.getBlockY() < highestBlockY) {
-                return; // Игрок не на открытом небе
-            }
-
-            // Проверяем время суток
+            // Проверяем время суток ПЕРВЫМ (самая быстрая проверка)
+            // Если dayTimeStart > dayTimeEnd, то день переходит через полночь (24000 -> 0)
             long time = world.getTime();
-            boolean isDayTime = time >= dayTimeStart && time <= dayTimeEnd;
+            boolean isDayTime;
+            if (dayTimeStart <= dayTimeEnd) {
+                // Обычный случай: день не переходит через полночь (например, 0-13000)
+                isDayTime = time >= dayTimeStart && time <= dayTimeEnd;
+            } else {
+                // День переходит через полночь (например, 23500-24000 и 0-13000)
+                isDayTime = time >= dayTimeStart || time <= dayTimeEnd;
+            }
 
             if (!isDayTime) {
                 return; // Ночь, солнца нет
@@ -574,23 +576,27 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 return; // Дождь/шторм, солнца нет
             }
 
-            // Проверяем, что игрок видит небо (нет блоков над головой)
-            if (loc.getBlockY() >= highestBlockY) {
-                // Проверяем защиту шлемом/головой
-                boolean isProtected = false;
-                if (helmetProtectionEnabled) {
-                    isProtected = hasProtectiveHelmet(player);
-                }
+            // Проверяем, что игрок на открытом небе (самая медленная проверка - делаем
+            // последней)
+            int highestBlockY = world.getHighestBlockYAt(loc);
+            if (loc.getBlockY() < highestBlockY) {
+                return; // Игрок не на открытом небе
+            }
 
-                // Применяем эффекты
-                for (PotionEffect effect : sunlightEffects) {
-                    applyEffect(player, effect);
-                }
+            // Проверяем защиту шлемом/головой
+            boolean isProtected = false;
+            if (helmetProtectionEnabled) {
+                isProtected = hasProtectiveHelmet(player);
+            }
 
-                // Поджигаем игрока, если включено и нет защиты
-                if (sunlightBurn && !isProtected) {
-                    player.setFireTicks(100);
-                }
+            // Применяем эффекты
+            for (PotionEffect effect : sunlightEffects) {
+                applyEffect(player, effect);
+            }
+
+            // Поджигаем игрока, если включено и нет защиты
+            if (sunlightBurn && !isProtected) {
+                player.setFireTicks(100);
             }
 
         } catch (Exception e) {
