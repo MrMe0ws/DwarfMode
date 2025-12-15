@@ -71,6 +71,9 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     // Интервал проверки в тиках (20 тиков = 1 секунда, 40 = 2 секунды)
     private int checkInterval = 40;
 
+    // Режим отладки (логирование детальной информации)
+    private boolean debugMode = false;
+
     @Override
     public void onEnable() {
         // Регистрация событий
@@ -115,6 +118,12 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             } catch (Exception e) {
                 getLogger().warning("Ошибка при чтении checkInterval, используется значение по умолчанию: 40");
                 checkInterval = 40;
+            }
+
+            // Загрузка режима отладки
+            debugMode = getConfig().getBoolean("debug", false);
+            if (debugMode) {
+                getLogger().info("Режим отладки ВКЛЮЧЕН - детальное логирование активно");
             }
 
             // Загрузка списка разрешенных миров
@@ -553,6 +562,12 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
      */
     private void checkSunlightPenalties(Player player, World world, Location loc) {
         try {
+            if (debugMode) {
+                getLogger().info("[DEBUG] Проверка солнечного света для " + player.getName() + 
+                    " в мире " + world.getName() + " на координатах " + 
+                    loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ());
+            }
+
             // Проверяем время суток ПЕРВЫМ (самая быстрая проверка)
             // Если dayTimeStart > dayTimeEnd, то день переходит через полночь (24000 -> 0)
             long time = world.getTime();
@@ -565,21 +580,44 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 isDayTime = time >= dayTimeStart || time <= dayTimeEnd;
             }
 
+            if (debugMode) {
+                getLogger().info("[DEBUG] Время суток: " + time + " тиков, день: " + dayTimeStart + 
+                    "-" + dayTimeEnd + ", isDayTime: " + isDayTime);
+            }
+
             if (!isDayTime) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Ночь, солнца нет - пропускаем");
+                }
                 return; // Ночь, солнца нет
             }
 
             // Проверяем, идет ли дождь или шторм
             // Если идет дождь/шторм, игрок не должен гореть и получать эффекты солнечного
             // света
-            if (world.hasStorm() || world.isThundering()) {
+            boolean hasStorm = world.hasStorm();
+            boolean isThundering = world.isThundering();
+            if (debugMode) {
+                getLogger().info("[DEBUG] Дождь: " + hasStorm + ", Гроза: " + isThundering);
+            }
+            if (hasStorm || isThundering) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Дождь/шторм, солнца нет - пропускаем");
+                }
                 return; // Дождь/шторм, солнца нет
             }
 
             // Проверяем, что игрок на открытом небе (самая медленная проверка - делаем
             // последней)
             int highestBlockY = world.getHighestBlockYAt(loc);
-            if (loc.getBlockY() < highestBlockY) {
+            int playerY = loc.getBlockY();
+            if (debugMode) {
+                getLogger().info("[DEBUG] Высота игрока: " + playerY + ", самый высокий блок: " + highestBlockY);
+            }
+            if (playerY < highestBlockY) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Игрок не на открытом небе (игрок ниже самого высокого блока) - пропускаем");
+                }
                 return; // Игрок не на открытом небе
             }
 
@@ -589,14 +627,38 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 isProtected = hasProtectiveHelmet(player);
             }
 
+            if (debugMode) {
+                getLogger().info("[DEBUG] Защита шлемом: " + isProtected + 
+                    " (helmetProtectionEnabled: " + helmetProtectionEnabled + ")");
+                getLogger().info("[DEBUG] Количество эффектов для применения: " + sunlightEffects.size());
+            }
+
             // Применяем эффекты
             for (PotionEffect effect : sunlightEffects) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Применяем эффект: " + effect.getType().getName() + 
+                        " уровень " + (effect.getAmplifier() + 1) + " на " + effect.getDuration() + " тиков");
+                }
                 applyEffect(player, effect);
             }
 
             // Поджигаем игрока, если включено и нет защиты
             if (sunlightBurn && !isProtected) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Поджигаем игрока (sunlightBurn: " + sunlightBurn + 
+                        ", isProtected: " + isProtected + ")");
+                }
                 player.setFireTicks(100);
+            } else if (debugMode) {
+                if (!sunlightBurn) {
+                    getLogger().info("[DEBUG] Поджигание отключено (sunlightBurn: false)");
+                } else {
+                    getLogger().info("[DEBUG] Игрок защищен шлемом, не поджигаем");
+                }
+            }
+
+            if (debugMode) {
+                getLogger().info("[DEBUG] Проверка солнечного света завершена успешно для " + player.getName());
             }
 
         } catch (Exception e) {
