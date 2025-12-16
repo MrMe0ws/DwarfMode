@@ -592,19 +592,19 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 return; // Ночь, солнца нет
             }
 
-            // Проверяем, идет ли дождь или шторм
-            // Если идет дождь/шторм, игрок не должен гореть и получать эффекты солнечного
-            // света
+            // Проверяем, идет ли дождь
+            // Если идет дождь, игрок не должен гореть и получать эффекты солнечного света
+            // Примечание: проверяем только дождь (hasStorm), а не грозу (isThundering),
+            // так как гроза может быть активна даже без дождя, и небо может быть открытым
             boolean hasStorm = world.hasStorm();
-            boolean isThundering = world.isThundering();
             if (debugMode) {
-                getLogger().info("[DEBUG] Дождь: " + hasStorm + ", Гроза: " + isThundering);
+                getLogger().info("[DEBUG] Дождь: " + hasStorm);
             }
-            if (hasStorm || isThundering) {
+            if (hasStorm) {
                 if (debugMode) {
-                    getLogger().info("[DEBUG] Дождь/шторм, солнца нет - пропускаем");
+                    getLogger().info("[DEBUG] Идет дождь, солнца нет - пропускаем");
                 }
-                return; // Дождь/шторм, солнца нет
+                return; // Дождь, солнца нет
             }
 
             // Проверяем, что игрок на открытом небе (самая медленная проверка - делаем
