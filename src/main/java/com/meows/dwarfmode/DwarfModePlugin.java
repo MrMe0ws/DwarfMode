@@ -37,7 +37,8 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     private boolean sunlightPenaltiesEnabled = true;
     private boolean sunlightBurn = true; // Гномы горят на солнце
     private boolean helmetProtectionEnabled = true; // Защита от солнца шлемами/головами
-    private boolean netheriteFireProtectionEnabled = true; // Защита от дебаффов незеритовым шлемом с Fire Protection 3+
+    private boolean debuffProtectionEnabled = true; // Защита от дебаффов определенными шлемами
+    private List<Material> debuffProtectionHelmets = new ArrayList<>(); // Список шлемов, защищающих от дебаффов
     private List<PotionEffect> sunlightEffects = new ArrayList<>();
     private long dayTimeStart = 0; // Начало дня (в тиках)
     private long dayTimeEnd = 12000; // Конец дня (в тиках)
@@ -262,7 +263,36 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             sunlightPenaltiesEnabled = section.getBoolean("enabled", true);
             sunlightBurn = section.getBoolean("burnInSunlight", true);
             helmetProtectionEnabled = section.getBoolean("helmetProtection", true);
-            netheriteFireProtectionEnabled = section.getBoolean("netheriteFireProtection", true);
+
+            // Загрузка списка шлемов, защищающих от дебаффов
+            debuffProtectionEnabled = section.getBoolean("debuffProtection.enabled", true);
+            debuffProtectionHelmets.clear();
+            List<?> helmetList = section.getList("debuffProtection.helmets");
+            if (helmetList != null && !helmetList.isEmpty()) {
+                for (Object helmetObj : helmetList) {
+                    if (helmetObj instanceof String) {
+                        String helmetName = ((String) helmetObj).trim().toUpperCase();
+                        try {
+                            Material helmetMaterial = Material.valueOf(helmetName);
+                            if (helmetMaterial != null) {
+                                debuffProtectionHelmets.add(helmetMaterial);
+                            }
+                        } catch (IllegalArgumentException e) {
+                            getLogger().warning("Неизвестный материал шлема: " + helmetName);
+                        }
+                    }
+                }
+            }
+            // Значения по умолчанию, если список пуст
+            if (debuffProtectionHelmets.isEmpty()) {
+                debuffProtectionHelmets.add(Material.NETHERITE_HELMET);
+                debuffProtectionHelmets.add(Material.TURTLE_HELMET);
+                getLogger().info(
+                        "Используются значения по умолчанию для защиты от дебаффов: NETHERITE_HELMET, TURTLE_HELMET");
+            } else {
+                getLogger().info("Загружено " + debuffProtectionHelmets.size() + " шлемов для защиты от дебаффов");
+            }
+
             dayTimeStart = section.getLong("dayTimeStart", 0);
             dayTimeEnd = section.getLong("dayTimeEnd", 12000);
             sunlightEffectDuration = section.getInt("duration", 100);
@@ -624,13 +654,11 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 return; // Игрок не на открытом небе
             }
 
-            // Проверяем защиту незеритовым шлемом с Fire Protection 3+ (защищает и от
-            // горения, и от дебаффов)
-            // ВАЖНО: защищает только Fire Protection III (уровень 2) и IV (уровень 3), НЕ
-            // II (уровень 1)
+            // Проверяем защиту от дебаффов определенными шлемами (защищает и от горения, и
+            // от дебаффов)
             boolean isProtectedFromDebuffs = false;
-            if (netheriteFireProtectionEnabled) {
-                isProtectedFromDebuffs = hasNetheriteFireProtection(player);
+            if (debuffProtectionEnabled) {
+                isProtectedFromDebuffs = hasDebuffProtectionHelmet(player);
             }
 
             // Проверяем защиту обычным шлемом/головой (защищает только от горения)
@@ -639,14 +667,14 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 // Проверяем обычные шлемы только если нет защиты от незеритового шлема
                 isProtected = hasProtectiveHelmet(player);
             } else if (isProtectedFromDebuffs) {
-                // Незеритовый шлем с Fire Protection 3+ защищает и от горения тоже
+                // Специальные шлемы (из списка debuffProtection) защищают и от горения тоже
                 isProtected = true;
             }
 
             if (debugMode) {
                 getLogger().info(
-                        "[DEBUG] Защита незеритовым шлемом с Fire Protection 3+ (от всего): " + isProtectedFromDebuffs +
-                                " (netheriteFireProtectionEnabled: " + netheriteFireProtectionEnabled + ")");
+                        "[DEBUG] Защита от дебаффов (специальные шлемы): " + isProtectedFromDebuffs +
+                                " (debuffProtectionEnabled: " + debuffProtectionEnabled + ")");
                 getLogger().info("[DEBUG] Защита обычным шлемом (только от горения): " + isProtected +
                         " (helmetProtectionEnabled: " + helmetProtectionEnabled + ")");
                 getLogger().info("[DEBUG] Количество эффектов для применения: " + sunlightEffects.size());
@@ -663,7 +691,7 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
                 }
             } else if (debugMode) {
                 getLogger()
-                        .info("[DEBUG] Игрок защищен незеритовым шлемом с Fire Protection 3+, эффекты не применяются");
+                        .info("[DEBUG] Игрок защищен специальным шлемом от дебаффов, эффекты не применяются");
             }
 
             // Поджигаем игрока, если включено и нет защиты
@@ -779,12 +807,10 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Проверка наличия незеритового шлема с зачарованием Fire Protection 3 или выше
-     * Защищает и от горения, и от дебаффов от солнца
-     * На шлеме могут быть другие зачарования (Protection, Unbreaking и т.д.), важно
-     * только наличие Fire Protection III+
+     * Проверка наличия шлема из списка, защищающего от дебаффов солнца
+     * Защищает и от горения, и от дебаффов
      */
-    private boolean hasNetheriteFireProtection(Player player) {
+    private boolean hasDebuffProtectionHelmet(Player player) {
         if (player == null || !player.isOnline()) {
             return false;
         }
@@ -794,66 +820,16 @@ public class DwarfModePlugin extends JavaPlugin implements Listener {
             return false;
         }
 
-        // Проверяем, что это незеритовый шлем
-        if (helmet.getType() != Material.NETHERITE_HELMET) {
-            return false;
+        Material helmetType = helmet.getType();
+
+        // Проверяем, есть ли этот шлем в списке защищающих от дебаффов
+        boolean isProtected = debuffProtectionHelmets.contains(helmetType);
+
+        if (debugMode && isProtected) {
+            getLogger().info("[DEBUG] Найден защищающий от дебаффов шлем: " + helmetType.name());
         }
 
-        // Проверяем наличие зачарования Fire Protection уровня 3 или выше
-        // В Minecraft уровни зачарований в коде: 0 = I, 1 = II, 2 = III, 3 = IV
-        // Нам нужно Fire Protection III или выше, что в коде означает level >= 2
-        try {
-            // Пробуем разные варианты названия зачарования
-            org.bukkit.enchantments.Enchantment fireProtection = null;
-            try {
-                fireProtection = org.bukkit.enchantments.Enchantment.getByName("PROTECTION_FIRE");
-            } catch (Exception e) {
-                // Игнорируем
-            }
-
-            if (fireProtection == null) {
-                try {
-                    fireProtection = org.bukkit.enchantments.Enchantment.getByName("FIRE_PROTECTION");
-                } catch (Exception e) {
-                    // Игнорируем
-                }
-            }
-
-            if (fireProtection == null) {
-                // Пробуем через NamespacedKey (современный способ)
-                try {
-                    fireProtection = org.bukkit.enchantments.Enchantment.getByKey(
-                            org.bukkit.NamespacedKey.minecraft("fire_protection"));
-                } catch (Exception e) {
-                    // Игнорируем
-                }
-            }
-
-            if (fireProtection != null && helmet.containsEnchantment(fireProtection)) {
-                int level = helmet.getEnchantmentLevel(fireProtection);
-                // В Bukkit API getEnchantmentLevel() возвращает уровень зачарования как:
-                // 1 = I, 2 = II, 3 = III, 4 = IV
-                // НЕ как 0=I, 1=II, 2=III, 3=IV!
-                // Нам нужно только Fire Protection III (level = 3) или IV (level = 4)
-                // НЕ включаем Fire Protection II (level = 2) или I (level = 1)
-
-                // Строгая проверка: только level == 3 (III) или level == 4 (IV)
-                // Исключаем level == 1 (I) и level == 2 (II)
-                boolean isLevel3Or4 = (level == 3 || level == 4);
-
-                if (debugMode) {
-                    getLogger().info("[DEBUG] Незеритовый шлем найден, Fire Protection уровень: " + level +
-                            " (1=I, 2=II, 3=III, 4=IV). Защита работает: " + isLevel3Or4 +
-                            " (нужен уровень 3 или 4, т.е. III или IV)");
-                }
-
-                return isLevel3Or4; // Только Fire Protection III (3) или IV (4)
-            }
-        } catch (Exception e) {
-            // Игнорируем ошибки при проверке зачарований
-        }
-
-        return false;
+        return isProtected;
     }
 
     /**
